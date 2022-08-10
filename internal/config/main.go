@@ -175,7 +175,7 @@ func (c *Config) AutoInstrumentationPythonImage() string {
 	return c.autoInstrumentationPythonImage
 }
 
-// AutoInstrumentationDotNetImage returns OpenTelemetry DotNet auto-instrumentation container image.
+// AutoInstrumentationDotNetImage returns OpenTelemetry .NET auto-instrumentation container image.
 func (c *Config) AutoInstrumentationDotNetImage() string {
 	return c.autoInstrumentationDotNetImage
 }

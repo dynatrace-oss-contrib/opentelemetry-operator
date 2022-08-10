@@ -53,7 +53,7 @@ func injectDotNetSDK(logger logr.Logger, dotNetSpec v1alpha1.DotNet, pod corev1.
 	} else if idx > -1 {
 		if container.Env[idx].ValueFrom != nil {
 			// TODO add to status object or submit it as an event
-			logger.Info("Skipping DotNet SDK injection, the container defines DOTNET_STARTUP_HOOKS env var value via ValueFrom", "container", container.Name)
+			logger.Info("Skipping .NET SDK injection, the container defines DOTNET_STARTUP_HOOKS env var value via ValueFrom", "container", container.Name)
 			return pod
 		}
 		container.Env[idx].Value = fmt.Sprintf("%s:%s", container.Env[idx].Value, dotNetStartupHookPath)
@@ -68,7 +68,7 @@ func injectDotNetSDK(logger logr.Logger, dotNetSpec v1alpha1.DotNet, pod corev1.
 	} else if idx > -1 {
 		if container.Env[idx].ValueFrom != nil {
 			// TODO add to status object or submit it as an event
-			logger.Info("Skipping DotNet SDK injection, the container defines DOTNET_ADDITIONAL_DEPS env var value via ValueFrom", "container", container.Name)
+			logger.Info("Skipping .NET SDK injection, the container defines DOTNET_ADDITIONAL_DEPS env var value via ValueFrom", "container", container.Name)
 			return pod
 		}
 		container.Env[idx].Value = fmt.Sprintf("%s:%s", container.Env[idx].Value, dotNetAdditionalDepsPath)
@@ -83,7 +83,7 @@ func injectDotNetSDK(logger logr.Logger, dotNetSpec v1alpha1.DotNet, pod corev1.
 	} else if idx > -1 {
 		if container.Env[idx].ValueFrom != nil {
 			// TODO add to status object or submit it as an event
-			logger.Info("Skipping DotNet SDK injection, the container defines DOTNET_SHARED_STORE env var value via ValueFrom", "container", container.Name)
+			logger.Info("Skipping .NET SDK injection, the container defines DOTNET_SHARED_STORE env var value via ValueFrom", "container", container.Name)
 			return pod
 		}
 		container.Env[idx].Value = fmt.Sprintf("%s:%s", container.Env[idx].Value, dotNetSharedStorePath)

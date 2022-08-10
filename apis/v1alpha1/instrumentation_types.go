@@ -55,7 +55,7 @@ type InstrumentationSpec struct {
 	// +optional
 	Python Python `json:"python,omitempty"`
 
-	// DotNet defines configuration for DotNet auto-instrumentation.
+	// DotNet defines configuration for .NET auto-instrumentation.
 	// +optional
 	DotNet DotNet `json:"dotnet,omitempty"`
 }
@@ -134,11 +134,11 @@ type Python struct {
 }
 
 type DotNet struct {
-	// Image is a container image with DotNet SDK and auto-instrumentation.
+	// Image is a container image with .NET SDK and auto-instrumentation.
 	// +optional
 	Image string `json:"image,omitempty"`
 
-	// Env defines DotNet specific env vars. There are four layers for env vars' definitions and
+	// Env defines .NET specific env vars. There are four layers for env vars' definitions and
 	// the precedence order is: `original container env vars` > `language specific env vars` > `common env vars` > `instrument spec configs' vars`.
 	// If the former var had been defined, then the other vars would be ignored.
 	// +optional
