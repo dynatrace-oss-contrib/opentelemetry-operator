@@ -99,4 +99,10 @@ type TargetAllocatorSpec struct {
 	// ReadinessProbe defines the readiness probe configuration for the Target Allocator container.
 	// +optional
 	ReadinessProbe *corev1.Probe `json:"readinessProbe,omitempty"`
+	// Telemetry is the configuration for the TargetAllocator's own telemetry, following the OpenTelemetry SDK
+	// configuration specification (https://opentelemetry.io/docs/specs/otel/configuration/sdk-configuration/).
+	// The value is passed through as the meter_provider section of the TargetAllocator config.
+	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	Telemetry *v1beta1.AnyConfig `json:"telemetry,omitempty"`
 }

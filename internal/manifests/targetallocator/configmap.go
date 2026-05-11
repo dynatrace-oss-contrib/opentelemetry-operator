@@ -145,6 +145,12 @@ func ConfigMap(params Params) (*corev1.ConfigMap, error) {
 		taConfig["collector_not_ready_grace_period"] = taSpec.CollectorNotReadyGracePeriod.Duration
 	}
 
+	if taSpec.Telemetry != nil {
+		if metrics, ok := taSpec.Telemetry.Object["metrics"]; ok {
+			taConfig["meter_provider"] = metrics
+		}
+	}
+
 	taConfigYAML, err := yaml.Marshal(taConfig)
 	if err != nil {
 		return &corev1.ConfigMap{}, err

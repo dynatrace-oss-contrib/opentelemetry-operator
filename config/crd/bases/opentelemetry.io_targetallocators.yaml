@@ -2919,6 +2919,9 @@ spec:
                 type: string
               shareProcessNamespace:
                 type: boolean
+              telemetry:
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
               terminationGracePeriodSeconds:
                 format: int64
                 type: integer

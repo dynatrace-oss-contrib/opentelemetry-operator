@@ -6,20 +6,26 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/oklog/run"
 	monitoringclient "github.com/prometheus-operator/prometheus-operator/pkg/client/versioned"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/prometheus/discovery"
+	otelconf "go.opentelemetry.io/contrib/otelconf/v0.3.0"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	otelprom "go.opentelemetry.io/otel/exporters/prometheus"
+	otlpmetricgrpc "go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
+	otlpmetrichttp "go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"k8s.io/client-go/kubernetes"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -81,12 +87,49 @@ func main() {
 		os.Exit(1)
 	}
 
-	metricExporter, promErr := otelprom.New()
+	// Always register the Prometheus pull reader so /metrics keeps working.
+	promExporter, promErr := otelprom.New()
 	if promErr != nil {
-		panic(promErr)
+		setupLog.Error(promErr, "Failed to create Prometheus exporter")
+		os.Exit(1)
 	}
-	meterProvider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(metricExporter))
-	otel.SetMeterProvider(meterProvider)
+	mpReaders := []sdkmetric.Reader{promExporter}
+
+	if len(cfg.MeterProvider) > 0 {
+		// Parse user-supplied meter_provider config (otelconf format) via JSON round-trip.
+		otelCfgJSON, jsonErr := json.Marshal(map[string]any{
+			"file_format":    "0.3",
+			"meter_provider": normalizeYAMLMap(cfg.MeterProvider),
+		})
+		if jsonErr != nil {
+			setupLog.Error(jsonErr, "Failed to marshal meter_provider configuration")
+			os.Exit(1)
+		}
+		var otelCfg otelconf.OpenTelemetryConfiguration
+		if jsonErr = json.Unmarshal(otelCfgJSON, &otelCfg); jsonErr != nil {
+			setupLog.Error(jsonErr, "Failed to parse meter_provider configuration")
+			os.Exit(1)
+		}
+		if otelCfg.MeterProvider != nil {
+			for i, r := range otelCfg.MeterProvider.Readers {
+				if r.Periodic == nil {
+					continue
+				}
+				reader, rErr := buildPeriodicReader(ctx, r.Periodic)
+				if rErr != nil {
+					setupLog.Error(rErr, "Failed to build periodic reader", "reader_index", i)
+					os.Exit(1)
+				}
+				mpReaders = append(mpReaders, reader)
+			}
+		}
+	}
+
+	var readerOpts []sdkmetric.Option
+	for _, r := range mpReaders {
+		readerOpts = append(readerOpts, sdkmetric.WithReader(r))
+	}
+	otel.SetMeterProvider(sdkmetric.NewMeterProvider(readerOpts...))
 
 	allocatorPrehook = prehook.New(cfg.FilterStrategy, log)
 	allocator, allocErr := allocation.New(cfg.AllocationStrategy, log, allocation.WithFilter(allocatorPrehook), allocation.WithFallbackStrategy(cfg.AllocationFallbackStrategy))
@@ -297,4 +340,111 @@ func main() {
 		setupLog.Error(runErr, "run group exited")
 	}
 	setupLog.Info("Target allocator exited.")
+}
+
+// normalizeYAMLMap recursively converts map[interface{}]interface{} (produced by
+// the go-yaml v2 parser) to map[string]interface{} so that encoding/json can
+// marshal the value without error.
+func normalizeYAMLMap(v any) any {
+	switch val := v.(type) {
+	case map[interface{}]interface{}:
+		out := make(map[string]any, len(val))
+		for k, v2 := range val {
+			out[fmt.Sprintf("%v", k)] = normalizeYAMLMap(v2)
+		}
+		return out
+	case map[string]interface{}:
+		for k, v2 := range val {
+			val[k] = normalizeYAMLMap(v2)
+		}
+		return val
+	case []interface{}:
+		for i, v2 := range val {
+			val[i] = normalizeYAMLMap(v2)
+		}
+		return val
+	default:
+		return v
+	}
+}
+
+// buildPeriodicReader constructs an sdkmetric.Reader from an otelconf PeriodicMetricReader config.
+// Only the otlp exporter is supported; pull readers are handled separately via otelprom.
+func buildPeriodicReader(ctx context.Context, cfg *otelconf.PeriodicMetricReader) (sdkmetric.Reader, error) {
+	if cfg.Exporter.OTLP == nil {
+		return nil, fmt.Errorf("only otlp exporter is supported in periodic readers")
+	}
+	otlpCfg := cfg.Exporter.OTLP
+
+	// Build headers map.
+	headers := make(map[string]string, len(otlpCfg.Headers))
+	for _, h := range otlpCfg.Headers {
+		if h.Value != nil {
+			headers[h.Name] = *h.Value
+		}
+	}
+
+	// Temporality selector.
+	temporality := sdkmetric.DefaultTemporalitySelector
+	if otlpCfg.TemporalityPreference != nil {
+		switch *otlpCfg.TemporalityPreference {
+		case "delta":
+			temporality = func(sdkmetric.InstrumentKind) metricdata.Temporality {
+				return metricdata.DeltaTemporality
+			}
+		case "lowmemory":
+			temporality = sdkmetric.LowMemoryTemporalitySelector
+		case "cumulative":
+			temporality = func(sdkmetric.InstrumentKind) metricdata.Temporality {
+				return metricdata.CumulativeTemporality
+			}
+		}
+	}
+
+	// Build the exporter — HTTP or gRPC.
+	protocol := "grpc"
+	if otlpCfg.Protocol != nil {
+		protocol = *otlpCfg.Protocol
+	}
+
+	var exp sdkmetric.Exporter
+	var err error
+	switch protocol {
+	case "http/protobuf", "http":
+		opts := []otlpmetrichttp.Option{
+			otlpmetrichttp.WithHeaders(headers),
+			otlpmetrichttp.WithTemporalitySelector(temporality),
+		}
+		if otlpCfg.Endpoint != nil {
+			opts = append(opts, otlpmetrichttp.WithEndpointURL(*otlpCfg.Endpoint))
+		}
+		if otlpCfg.Timeout != nil {
+			opts = append(opts, otlpmetrichttp.WithTimeout(time.Duration(*otlpCfg.Timeout)*time.Millisecond))
+		}
+		exp, err = otlpmetrichttp.New(ctx, opts...)
+	default: // grpc
+		opts := []otlpmetricgrpc.Option{
+			otlpmetricgrpc.WithHeaders(headers),
+			otlpmetricgrpc.WithTemporalitySelector(temporality),
+		}
+		if otlpCfg.Endpoint != nil {
+			opts = append(opts, otlpmetricgrpc.WithEndpoint(*otlpCfg.Endpoint))
+		}
+		if otlpCfg.Timeout != nil {
+			opts = append(opts, otlpmetricgrpc.WithTimeout(time.Duration(*otlpCfg.Timeout)*time.Millisecond))
+		}
+		exp, err = otlpmetricgrpc.New(ctx, opts...)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	var readerOpts []sdkmetric.PeriodicReaderOption
+	if cfg.Interval != nil {
+		readerOpts = append(readerOpts, sdkmetric.WithInterval(time.Duration(*cfg.Interval)*time.Millisecond))
+	}
+	if cfg.Timeout != nil {
+		readerOpts = append(readerOpts, sdkmetric.WithTimeout(time.Duration(*cfg.Timeout)*time.Millisecond))
+	}
+	return sdkmetric.NewPeriodicReader(exp, readerOpts...), nil
 }

@@ -72,6 +72,9 @@ type Config struct {
 	PrometheusCR                 PrometheusCRConfig    `yaml:"prometheus_cr,omitempty"`
 	HTTPS                        HTTPSServerConfig     `yaml:"https,omitempty"`
 	CollectorNotReadyGracePeriod time.Duration         `yaml:"collector_not_ready_grace_period,omitempty"`
+	// MeterProvider holds an OpenTelemetry SDK MeterProvider configuration following the OTel SDK config spec.
+	// When set, it is passed to otelconf.NewSDK to initialise additional metric readers (e.g. OTLP push).
+	MeterProvider map[string]any `yaml:"meter_provider,omitempty"`
 }
 
 type PrometheusCRConfig struct {

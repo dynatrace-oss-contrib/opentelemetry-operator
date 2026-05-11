@@ -8639,6 +8639,9 @@ spec:
                     type: object
                   serviceAccount:
                     type: string
+                  telemetry:
+                    type: object
+                    x-kubernetes-preserve-unknown-fields: true
                   tolerations:
                     items:
                       properties:

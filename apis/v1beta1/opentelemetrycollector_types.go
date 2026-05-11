@@ -237,6 +237,13 @@ type TargetAllocatorEmbedded struct {
 	// +kubebuilder:default:="30s"
 	// +kubebuilder:validation:Format:=duration
 	CollectorTargetReloadInterval *metav1.Duration `json:"collectorTargetReloadInterval,omitempty"`
+	// Telemetry is the configuration for the TargetAllocator's own telemetry, following the OpenTelemetry SDK
+	// configuration specification (https://opentelemetry.io/docs/specs/otel/configuration/sdk-configuration/).
+	// The value is passed through as the meter_provider section of the TargetAllocator config, enabling additional
+	// metric readers (e.g. OTLP push) alongside the default Prometheus /metrics endpoint.
+	// +optional
+	// +kubebuilder:pruning:PreserveUnknownFields
+	Telemetry *AnyConfig `json:"telemetry,omitempty"`
 }
 
 // Probe defines the OpenTelemetry's pod probe config.

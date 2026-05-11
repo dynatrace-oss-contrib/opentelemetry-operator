@@ -277,6 +277,11 @@ require (
 	github.com/stackitcloud/stackit-sdk-go/core v0.23.0 // indirect
 	github.com/vultr/govultr/v3 v3.28.1 // indirect
 	go.mongodb.org/mongo-driver/v2 v2.5.0 // indirect
+	go.opentelemetry.io/contrib/propagators/autoprop v0.68.0 // indirect
+	go.opentelemetry.io/contrib/propagators/aws v1.43.0 // indirect
+	go.opentelemetry.io/contrib/propagators/b3 v1.43.0 // indirect
+	go.opentelemetry.io/contrib/propagators/jaeger v1.43.0 // indirect
+	go.opentelemetry.io/contrib/propagators/ot v1.43.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc v0.19.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp v0.19.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v1.43.0 // indirect
